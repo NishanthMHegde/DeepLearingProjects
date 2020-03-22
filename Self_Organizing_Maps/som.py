@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import pandas as pd 
 from pylab import bone, colorbar, plot, show, pcolor 
+from sklearn.preprocessing import MinMaxScaler
+from minisom import MiniSom 
 
 """
 What is a self organizing map?
@@ -37,3 +39,70 @@ The aim of this exercise is to ascertain which customers managed to get an advan
 customers who have tricked the bank in obtaining advanced credit.
 
 """
+
+df = pd.read_csv('Credit_Card_Applications.csv')
+print(df.head())
+X = df.iloc[:, 0:-1].values
+y = df.iloc[:,-1].values
+
+#Let us feature scale the data to have all data in range (0,1)
+sc = MinMaxScaler(feature_range=(0,1))
+X = sc.fit_transform(X)
+
+#Let us now create the SOM object
+#input_len is the number of indpendent variables or attributes in our dataset X
+#x and y hold the num of rows and columns in the SOM grid
+print("Let us now create the SOM object")
+som = MiniSom(x=10, y=10, input_len=15, sigma=1.0, learning_rate=0.5, random_seed=0)
+#let us now initialize random weights which are initially small and in range (0,1)
+print("let us now initialize random weights which are initially small and in range (0,1)")
+som.random_weights_init(X)
+#Let us now train our data
+print("Let us now train our data")
+som.train_random(data=X, num_iteration=100)
+
+#Let us now plot our SOM using pylab
+print("Let us now plot our SOM using pylab")
+bone() #Plots the white background where we can place our graph
+pcolor(som.distance_map().T) #distance map plots the SOM which has colorwise representation of the Mean Interneuron Distances (MID) between that node to its visible input nodes
+colorbar() #The color bar plots a scale which signifies what each color level means. In our distance map, white means highest MID and black means lowest MID
+#we can assume that the nodes with highest MID have the customers who do not have a good track record with the bank and are most likey to perform fraudulent activities.
+#Let us now verify how many customers fall under the "Got Credit" and "Did not Get Credit" categories and to which MID on the distance map they belong to.
+print("we can assume that the nodes with highest MID have the customers who do not have a good track record with the bank and are most likey to perform fraudulent activities.")
+print("Let us now verify how many customers fall under the \"Got Credit\" and \"Did not Get Credit\" categories and to which MID on the distance map they belong to.")
+for i, x in enumerate(X):
+	#i holds the customer id
+	#x holds independent variable
+	#red circle means did not get credit
+	#green square means they got the credit
+	markers = ['o', 's']
+	colors = ['r', 'g']
+	w = som.winner(x) #for each attribute in an observation, get the winner neuron x-y coordinates
+	#plot the winning neuron for each observation at the center (0.5 units to the right and 0.5 units top so that it lies in center)
+	plot(w[0]+0.5, w[1]+0.5, markers[y[i]],
+		markerfacecolor='None',
+		markeredgecolor=colors[y[i]],
+		markersize=10,
+		markeredgewidth=2)
+show()
+
+#Finding the frauds
+print("Finding the frauds")
+
+#In the above SOM, we can see that the customers in the white nodes (MID) got apporval as indicated by green square. This is fraudulent. 
+#The customers in outlier nodes (MID ~ 1.0) should NEVER get approval. So let us catch the culrpits.
+
+print("In the above SOM, we can see that the customers in the white nodes (MID) got apporval as indicated by green square. This is fraudulent.")
+print("The customers in outlier nodes (MID ~ 1.0) should NEVER get approval. So let us catch the culrpits.")
+
+#win_map retruns a dictionary where the key is the co-ordinates of the winning nodes and the value is a list of the customers belonging to that winning node.
+print("win_map retruns a dictionary where the key is the co-ordinates of the winning nodes and the value is a list of the customers belonging to that winning node.")
+mapping = som.win_map(X)
+#There are 3 outlier nodes (MID=1.0) but 2 of those nodes have customers who got approval. Let us find those customers belonging to those 2 winning nodes.
+print("There are 3 outlier nodes (MID=1.0) but 2 of those nodes have customers who got approval. Let us find those customers belonging to those 2 winning nodes.")
+frauds = np.concatenate((mapping[(2,3)], mapping[(2, 5)]), axis=0) #axis=0 means we need to concatenate along the rows so that customers list are placed one beneath the other
+
+#We need to now inverse transform our feature scaled data to get the actual data
+frauds = sc.inverse_transform(frauds)
+print("Our fradulent customers who get Credit Approval despite having bad stats are")
+print(frauds)
